@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Non-Linear Agent - LangGraph + Mistral</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            max-width: 900px;
+            width: 100%;
+            min-height: 600px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.error {
+            background: #dc3545;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .query-section {
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        #queryInput {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            font-size: 16px;
+            background: white;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        #queryInput:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .examples {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .example-btn {
+            padding: 12px 16px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            font-size: 14px;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .example-btn:hover {
+            background: rgba(102, 126, 234, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .result-section {
+            margin-top: 30px;
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .route-info {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .route-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .processing-time {
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 15px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .result-content {
+            line-height: 1.6;
+            color: #2c3e50;
+        }
+
+        .result-content h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .result-content p {
+            margin-bottom: 12px;
+        }
+
+        .result-content strong {
+            color: #2c3e50;
+        }
+
+        .metadata-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .metadata-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .metadata-key {
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .metadata-value {
+            color: #2c3e50;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 18px;
+        }
+
+        .loading::after {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 2px solid #667eea;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            margin-left: 10px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .feature-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            font-size: 14px;
+            color: #6c757d;
+            line-height: 1.4;
+        }
+
+        .processing-card {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-left: 4px solid #fdcb6e;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .processing-content {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #856404;
+        }
+
+        .processing-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #fdcb6e;
+            border-top: 3px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .examples {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Non-Linear Agent</h1>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+            <div class="status-item">
+                <span>Model: <strong id="modelName">-</strong></span>
+            </div>
+            <div class="status-item">
+                <span>Connection: <strong id="connectionStatus">WebSocket</strong></span>
+            </div>
+        </div>
+
+        <div class="query-section">
+            <div class="input-group">
+                <input type="text" id="queryInput" placeholder="Ask me anything - math, translation, summarization, or general questions..." />
+                <button class="btn btn-primary" id="submitBtn">Send Query</button>
+                <button class="btn btn-secondary" id="clearBtn">Clear</button>
+            </div>
+
+            <div class="examples">
+                <div class="example-btn" data-query="Calculate 25 * 18 + 142">🧮 Math: 25 * 18 + 142</div>
+                <div class="example-btn" data-query="Translate 'Hello world' to Spanish">🌍 Translation</div>
+                <div class="example-btn" data-query="Summarize: Machine learning is a subset of artificial intelligence that focuses on algorithms that can learn from data">📄 Summarization</div>
+                <div class="example-btn" data-query="What is the capital of France?">❓ General Query</div>
+            </div>
+        </div>
+
+        <div class="result-section">
+            <div id="results"></div>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🧮</div>
+                <div class="feature-title">Math Solver</div>
+                <div class="feature-desc">Solve arithmetic, equations, and word problems with step-by-step solutions</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📝</div>
+                <div class="feature-title">Text Summarizer</div>
+                <div class="feature-desc">Create concise summaries of long text content</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🌍</div>
+                <div class="feature-title">Translator</div>
+                <div class="feature-desc">Translate text between different languages</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💬</div>
+                <div class="feature-title">General Chat</div>
+                <div class="feature-desc">Ask questions and get comprehensive answers</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class AgentInterface {
+            constructor() {
+                this.socket = io();
+                this.isProcessing = false;
+                this.currentProcessingCard = null;
+                this.queryCounter = 0;
+                this.initializeElements();
+                this.bindEvents();
+                this.connectWebSocket();
+            }
+
+            initializeElements() {
+                this.queryInput = document.getElementById('queryInput');
+                this.submitBtn = document.getElementById('submitBtn');
+                this.clearBtn = document.getElementById('clearBtn');
+                this.results = document.getElementById('results');
+                this.statusIndicator = document.getElementById('statusIndicator');
+                this.statusText = document.getElementById('statusText');
+                this.modelName = document.getElementById('modelName');
+                this.connectionStatus = document.getElementById('connectionStatus');
+            }
+
+            bindEvents() {
+                this.submitBtn.addEventListener('click', () => this.submitQuery());
+                this.clearBtn.addEventListener('click', () => this.clearResults());
+                this.queryInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.submitQuery();
+                });
+
+                // Example buttons
+                document.querySelectorAll('.example-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.queryInput.value = btn.dataset.query;
+                        this.submitQuery();
+                    });
+                });
+            }
+
+            connectWebSocket() {
+                this.socket.on('connect', () => {
+                    this.connectionStatus.textContent = 'Connected';
+                    this.statusText.textContent = 'WebSocket Connected';
+                    this.statusIndicator.className = 'status-indicator';
+                });
+
+                this.socket.on('disconnect', () => {
+                    this.connectionStatus.textContent = 'Disconnected';
+                    this.statusText.textContent = 'WebSocket Disconnected';
+                    this.statusIndicator.className = 'status-indicator error';
+                });
+
+                this.socket.on('status', (data) => {
+                    this.modelName.textContent = data.model || 'Unknown';
+                    if (data.agent_ready) {
+                        this.statusText.textContent = 'Agent Ready';
+                        this.statusIndicator.className = 'status-indicator';
+                    } else {
+                        this.statusText.textContent = 'Agent Not Ready';
+                        this.statusIndicator.className = 'status-indicator error';
+                    }
+                });
+
+                this.socket.on('processing', (data) => {
+                    this.showProcessing(data.status);
+                });
+
+                this.socket.on('result', (data) => {
+                    this.displayResult(data);
+                    this.stopProcessing();
+                });
+
+                this.socket.on('error', (data) => {
+                    this.displayError(data.message);
+                    this.stopProcessing();
+                });
+            }
+
+            submitQuery() {
+                const query = this.queryInput.value.trim();
+                if (!query || this.isProcessing) return;
+
+                this.startProcessing();
+                this.socket.emit('query', { query: query });
+                this.queryCounter++;
+            }
+
+            startProcessing() {
+                this.isProcessing = true;
+                this.submitBtn.disabled = true;
+                this.submitBtn.textContent = 'Processing...';
+                this.showProcessing('Starting query processing...');
+            }
+
+            stopProcessing() {
+                this.isProcessing = false;
+                this.submitBtn.disabled = false;
+                this.submitBtn.textContent = 'Send Query';
+                if (this.currentProcessingCard) {
+                    this.currentProcessingCard.remove();
+                    this.currentProcessingCard = null;
+                }
+            }
+
+            showProcessing(status) {
+                // Remove existing processing card
+                if (this.currentProcessingCard) {
+                    this.currentProcessingCard.remove();
+                }
+
+                // Create new processing card
+                const processingDiv = document.createElement('div');
+                processingDiv.className = 'processing-card';
+                processingDiv.innerHTML = `
+                    <div class="processing-content">
+                        <div class="processing-spinner"></div>
+                        <div>
+                            <strong>Processing...</strong>
+                            <div style="font-size: 14px; margin-top: 5px;">${status}</div>
+                        </div>
+                    </div>
+                `;
+
+                this.currentProcessingCard = processingDiv;
+                this.results.appendChild(processingDiv);
+                this.scrollToBottom();
+            }
+
+            displayResult(data) {
+                const resultCard = document.createElement('div');
+                resultCard.className = 'result-card';
+
+                const timestamp = new Date().toLocaleTimeString();
+                const route = data.route || 'general';
+                const processingTime = data.processing_time || 'N/A';
+
+                resultCard.innerHTML = `
+                    <div class="result-header">
+                        <div class="route-info">
+                            <span class="route-badge">${route}</span>
+                            <span class="processing-time">⏱️ ${processingTime}ms</span>
+                        </div>
+                        <div class="processing-time">${timestamp}</div>
+                    </div>
+                    <div class="result-content">
+                        <h3>Query: ${data.query || this.queryInput.value}</h3>
+                        <p><strong>Response:</strong></p>
+                        <div>${this.formatResponse(data.output)}</div>
+                    </div>
+                    ${data.metadata ? this.createMetadataSection(data.metadata) : ''}
+                `;
+
+                this.results.appendChild(resultCard);
+                this.scrollToBottom();
+            }
+
+            formatResponse(response) {
+                if (!response) return 'No response received';
+
+                // Convert newlines to <br> tags and handle basic formatting
+                return response
+                    .replace(/\n/g, '<br>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/`(.*?)`/g, '<code style="background: #f8f9fa; padding: 2px 4px; border-radius: 3px;">$1</code>');
+            }
+
+            createMetadataSection(metadata) {
+                const items = Object.entries(metadata)
+                    .map(([key, value]) => `
+                        <div class="metadata-item">
+                            <span class="metadata-key">${key}:</span>
+                            <span class="metadata-value">${value}</span>
+                        </div>
+                    `).join('');
+
+                return `
+                    <div class="metadata-section">
+                        <h4 style="margin-bottom: 10px; color: #667eea;">Metadata</h4>
+                        ${items}
+                    </div>
+                `;
+            }
+
+            displayError(message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.innerHTML = `
+                    <strong>Error:</strong> ${message}
+                    <div style="margin-top: 8px; font-size: 14px;">
+                        Please check your connection and try again.
+                    </div>
+                `;
+
+                this.results.appendChild(errorDiv);
+                this.scrollToBottom();
+            }
+
+            clearResults() {
+                this.results.innerHTML = '';
+                this.queryInput.value = '';
+                this.queryCounter = 0;
+            }
+
+            scrollToBottom() {
+                this.results.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }
+        }
+
+        // Initialize the application when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new AgentInterface();
+        });
+
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.log('Page is hidden');
+            } else {
+                console.log('Page is visible');
+            }
+        });
+    </script>
+</body>
+</html>
